@@ -1,0 +1,127 @@
+# -*- coding: utf-8 -*-
+
+import os
+import pandas as pd
+from flask import Flask, jsonify, render_template, request
+from flask_cors import CORS  # Import CORS
+import mysql.connector
+from flaskext.mysql import MySQL
+import json
+
+# Define allowed hosts
+ALLOWED_HOSTS = [
+    'http://trbil.missouri.edu', 
+    'http://digbio-soykb2.rnet.missouri.edu:3030/',
+    'http://digbio-soykb2.rnet.missouri.edu:3030',
+    'http://digbio-soykb2.rnet.missouri.edu'
+]
+
+app = Flask(__name__)
+CORS(app, origins=ALLOWED_HOSTS)
+
+mysql = MySQL()
+app.config['MYSQL_DATABASE_USER'] = 'KBCommons'
+app.config['MYSQL_DATABASE_PASSWORD'] = 'KsdbsaKNm55d3QtvtX44nSzS_'
+app.config['MYSQL_DATABASE_DB'] = 'Omics_verse'
+app.config['MYSQL_DATABASE_HOST'] = 'digbio-db1.rnet.missouri.edu'
+mysql.init_app(app)
+
+@app.route('/')
+def home():
+    return jsonify({
+        "hello": "world"
+    })
+
+@app.route('/omic_lens', methods=['GET'])
+def test_info():
+
+    conn = mysql.connect()
+    cursor =conn.cursor()
+
+    cursor.execute("SELECT * FROM multiomics_metadata;")
+    result = cursor.fetchall()
+
+    return jsonify(result)
+
+@app.route('/search', methods=['POST'])
+def search():
+
+    response = {"data": []}
+
+    data = request.json
+    
+    organism = data.get("selectedOrganism")
+    omics_type = data.get("selectedOmicsType")
+    extraction_type = data.get("selectedMasterSheetType")
+    conditions = data.get("selectedDevelopmentalStage")
+    gene_id = data.get("geneId")
+    gene_id_list = [gene.strip() for gene in gene_id.split(",") if gene.strip()]
+    homolog_id = data.get("homolog_id")
+    homolog_id_list = [gene.strip() for gene in homolog_id.split(",") if gene.strip()]
+    keywords = data.get("keyword")
+    keywords_list = [keyword.strip() for keyword in keywords.split(",") if keyword.strip()]
+
+    conn = mysql.connect()
+    cursor =conn.cursor()
+    query = """
+            SELECT mapping_table_name
+            FROM multiomics_metadata
+            WHERE organism = %s AND omics_type = %s AND extraction_type = %s and conditions = %s
+        """
+    cursor.execute(query, (organism, omics_type, extraction_type, conditions))
+    mapping_table_name = cursor.fetchall()[0]
+    if isinstance(mapping_table_name, tuple):
+        mapping_table_name = mapping_table_name[0]
+    # cursor.close()
+    # conn.close()
+    search_results = []
+    if gene_id_list:
+        if gene_id_list[0].startswith("Cluster"):  # Check if the first element is a cluster ID
+            clusters = ", ".join(["%s"] * len(gene_id_list))        
+            search_query = f"SELECT * FROM {mapping_table_name} WHERE cluster_id IN ({clusters});"
+            cursor.execute(search_query, gene_id_list)
+            cluster_results = cursor.fetchall()
+            search_results.extend(cluster_results)
+        else:
+            genes = ", ".join(["%s"] * len(gene_id_list))        
+            search_query = f"SELECT * FROM {mapping_table_name} WHERE gene_id IN ({genes});"
+            cursor.execute(search_query, gene_id_list)
+            gene_results = cursor.fetchall()
+            search_results.extend(gene_results)
+    # if gene_id_list:
+    #     genes = ", ".join(["%s"] * len(gene_id_list))        
+    #     search_query = f"SELECT * FROM {mapping_table_name} WHERE gene_id IN ({genes});"
+
+    #     cursor.execute(search_query, gene_id_list)
+    #     gene_results = cursor.fetchall()
+    #     search_results.extend(gene_results)
+    if homolog_id_list:
+        homologs = ", ".join(["%s"] * len(homolog_id_list))
+        search_query = f"SELECT * FROM {mapping_table_name} WHERE ATGeneID IN ({homologs});"
+
+        cursor.execute(search_query, homolog_id_list)
+        homolog_results = cursor.fetchall()
+        search_results.extend(homolog_results) 
+    if keywords_list:
+        cursor.execute(f"DESCRIBE {mapping_table_name};")
+        columns = [column[0] for column in cursor.fetchall() if column[1] in ('varchar', 'text', 'char')]
+        conditions = []
+        for keyword in keywords_list:
+            conditions.append(" OR ".join([f"`{col}` LIKE %s" for col in columns]))
+        search_query = f"SELECT * FROM {mapping_table_name} WHERE ({' OR '.join(conditions)});"
+        params = [f"%{keyword}%" for keyword in keywords_list for _ in columns]
+        cursor.execute(search_query, params)
+        keyword_results = cursor.fetchall()
+        search_results.extend(keyword_results) 
+
+    headers = [desc[0] for desc in cursor.description]
+    response = {
+    "headers": headers,
+    "data": search_results
+        }
+    
+    return jsonify(response)
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 3300)))
+    

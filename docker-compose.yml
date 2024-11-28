@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile  # Ensure this matches the actual Dockerfile name
+    container_name: "omics_portal_backend"
+    tty: true
+    ports:
+      - "3300:3300"
+    environment:
+      - FLASK_ENV=development
+    volumes:
+      - ./app:/app  # Mount the host's `./app` directory to the container's `/app` directory
+    networks:
+      - default
+      - kbc-net
+
+networks:
+  kbc-net:
+    external: true
+
