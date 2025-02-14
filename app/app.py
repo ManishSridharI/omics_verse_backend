@@ -15,7 +15,10 @@ ALLOWED_HOSTS = [
     'http://trbil.missouri.edu', 
     'http://digbio-soykb2.rnet.missouri.edu:3030/',
     'http://digbio-soykb2.rnet.missouri.edu:3030',
-    'http://digbio-soykb2.rnet.missouri.edu'
+    'http://digbio-soykb2.rnet.missouri.edu',
+    'http://digbio-devel.missouri.edu:3030/',
+    'http://digbio-devel.missouri.edu:3030',
+    'http://digbio-devel.missouri.edu'
 ]
 
 app = Flask(__name__)
