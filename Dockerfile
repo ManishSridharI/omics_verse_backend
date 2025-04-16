@@ -22,7 +22,15 @@
 # CMD ["gunicorn", "--bind", ":9900", "--workers", "1", "--threads", "8", "--timeout", "0", "main:app"]
 
 # Use the official lightweight Python image.
-FROM python:3.7-slim
+FROM python:3.9-slim
+
+# Install dependencies for R (if required) and system packages for Python packages
+RUN apt-get update && apt-get install -y \
+    r-base \
+    gcc \
+    libffi-dev \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Allow statements and log messages to immediately appear in the Knative logs
 ENV PYTHONUNBUFFERED True
@@ -35,8 +43,18 @@ ENV APP_HOME /app
 WORKDIR $APP_HOME
 COPY . ./
 
+# Add Redis for Celery
+RUN apt-get update && apt-get install -y redis-server
+
 # # Install production dependencies.
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the R package installation script into the container
+COPY install_packages.R /install_packages.R
+
+# Install R packages from the script
+RUN Rscript /install_packages.R
+RUN Rscript -e "library(mixOmics); packageVersion('mixOmics')"
 
 #Use the flask command to run the app to take advantage of the reload mechanism
 CMD ["flask", "run", "--host=0.0.0.0", "--port=3300"]
