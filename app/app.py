@@ -12,6 +12,7 @@ from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from mixomics_llp import mixomics_metadata, goi_upload
 from celery_config import make_celery
+from compare import compare_mixomics
 import subprocess
 import numpy as np
 import pandas as pd
@@ -21,6 +22,7 @@ import logging
 import shutil
 from io import BytesIO
 import tempfile
+from collections import defaultdict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,7 +35,15 @@ ALLOWED_HOSTS = [
     'http://digbio-soykb2.rnet.missouri.edu',
     'http://digbio-devel.missouri.edu:3030/',
     'http://digbio-devel.missouri.edu:3030',
-    'http://digbio-devel.missouri.edu'
+    'http://digbio-devel.missouri.edu',
+    'omics_portal_frontend',
+    'omics_verse_frontend-web',
+    '127.0.0.1',
+    'localhost',
+    'http://omics_portal_frontend:3030',
+    'http://omics_verse_frontend-web:3030',
+    'http://127.0.0.1:3030',
+    'http://localhost:3030',
 ]
 
 app = Flask(__name__)
@@ -208,7 +218,7 @@ def user_tasks(user_id):
 
     try:
         cursor.execute(
-            "SELECT id, organism, timepoint, status, created_at, started_at, completed_at FROM mixomics_tasks WHERE user_id = %s ORDER BY created_at DESC",
+            "SELECT id, organism, timepoint,status, created_at, started_at, completed_at, q_value, log2_fc FROM mixomics_tasks WHERE user_id = %s ORDER BY created_at DESC",
             (user_id,))
         
         tasks = cursor.fetchall()
@@ -223,7 +233,7 @@ def user_tasks(user_id):
         
 
 @celery.task(name="run_r_script")
-def run_r_script(task_id, user_id, timepoint, timepoint_ids, mixomics_folder_path):
+def run_r_script(task_id, user_id, timepoint, timepoint_ids, mixomics_folder_path, GOI_path):
     """Celery task to run the R script with appropriate parameters"""
     
     Y_ids = [id.split('R')[0].rstrip('_') for id in timepoint_ids]
@@ -235,7 +245,8 @@ def run_r_script(task_id, user_id, timepoint, timepoint_ids, mixomics_folder_pat
                '--ids', ",".join([f'"{i}"' for i in Y_ids]),
                '--timepoints', ",".join([f'"{tp}"' for tp in timepoint_ids]),
                '--task_id', task_id,
-               '--user_id', user_id]
+               '--user_id', user_id,
+               '--GOI_path', GOI_path]
        
         logger.info(f"Running command: {cmd}")
         
@@ -257,6 +268,7 @@ def run_r_script(task_id, user_id, timepoint, timepoint_ids, mixomics_folder_pat
     
     except subprocess.CalledProcessError as e:
         # Connect to database
+        
         conn = mysql.connect()
         cursor = conn.cursor()
         
@@ -280,10 +292,13 @@ def mixomics_start_task():
     
     mixomics_folder_paths = data.get('mixomics_folder_path')
     timepoint_ids_list = data.get('timepoint_ids')
+    log2fc_for_compare_list = data.get('log2fc_for_compare')
+    qvalue_for_compare_list = data.get('qvalue_for_compare')
     tps_list = data.get('tps')
     organism = data.get('selectedOrganism')
+    GOI_path = data.get('GOI_path')
     
-    if not (len(mixomics_folder_paths) == len(timepoint_ids_list) == len(tps_list)):
+    if not (len(mixomics_folder_paths) == len(timepoint_ids_list) == len(tps_list) == len(log2fc_for_compare_list)):
         return jsonify({'status': 'error', 'message': 'Mismatched payload lengths'}), 400
 
     task_ids = []
@@ -305,7 +320,10 @@ def mixomics_start_task():
             completed_at TIMESTAMP NULL,
             status VARCHAR(20) DEFAULT 'pending',
             result TEXT NULL,
-            error TEXT NULL
+            error TEXT NULL,
+            GOI_path VARCHAR(200) NULL,
+            q_value FLOAT NOT NULL,
+            log2_fc INT NOT NULL
         )
         """)
         conn.commit()
@@ -319,8 +337,8 @@ def mixomics_start_task():
             # Insert task info into database
             cursor.execute("""
             INSERT INTO mixomics_tasks 
-            (id, user_id, organism, timepoint, timepoint_ids, mixomics_folder_path, status, started_at) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (id, user_id, organism, timepoint, timepoint_ids, mixomics_folder_path, status, started_at, GOI_path, q_value, log2_fc) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 task_id, 
                 user_id, 
@@ -329,7 +347,10 @@ def mixomics_start_task():
                 timepoint_ids_str, 
                 str(mixomics_folder_paths[i]),
                 "scheduled",
-                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                GOI_path,
+                qvalue_for_compare_list[i],
+                log2fc_for_compare_list[i]
             ))
             
             Y_ids = [id.split('R')[0].rstrip('_') for id in (timepoint_ids_list[i])]
@@ -340,7 +361,8 @@ def mixomics_start_task():
                '--ids', ",".join([f'"{i}"' for i in Y_ids]),
                '--timepoints', str(timepoint_ids_list[i]),
                '--task_id', task_id,
-               '--user_id', user_id]
+               '--user_id', user_id,
+               '--GOI_path', GOI_path]
             print(cmd)
             
             # Schedule the task using Celery
@@ -349,7 +371,8 @@ def mixomics_start_task():
                 user_id,
                 tps_list[i],
                 timepoint_ids_list[i],
-                mixomics_folder_paths[i]
+                mixomics_folder_paths[i],
+                GOI_path
             )
             
             task_ids.append(task_id)
@@ -404,6 +427,115 @@ def serve_file(user_id, task_id, filename):
         return send_from_directory(os.path.dirname(file_path), filename)
     else:
         return "File not found", 404
+    
+@app.route('/app/results/plots/<user_id>/<task_id>')
+def view_plots(user_id, task_id):
+    file_path = f'/app/results/{user_id}/{task_id}/data_for_react.json'
+    
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+
+        return jsonify(data)
+    else:
+        return jsonify({"error": "File not found"}), 404
+    
+@app.route('/app/results/summary/<user_id>/<task_id>')
+def view_summary(user_id, task_id):
+    file_path = f'/app/results/{user_id}/{task_id}/correlation_type_counts.json'
+
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as f:
+            counts = json.load(f)
+
+        return jsonify(counts)
+    else:
+        return jsonify({"error": "File not found"}), 404
+    
+@app.route('/app/results/summary/chord', methods=['POST'])
+def view_chord():
+    try:
+        # Get the parameters from the request
+        data = request.get_json()
+        task_id = data.get('taskId')
+        cutoff = data.get('cutoff')
+        userId = data.get('userId')
+
+        if not task_id or not cutoff:
+            return jsonify({"error": "Missing task ID or cutoff"}), 400
+
+        # Prepare the command to run the R script
+        command = [
+            'Rscript', 'chord_split.R', str(task_id), str(userId), str(cutoff)
+        ]
+        print(command)
+        # Run the R script
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print("STDERR from R script:", result.stderr)  # Print to server logs
+            return jsonify({
+                "error": "Error running chord.R",
+                "stderr": result.stderr,
+                "stdout": result.stdout
+            }), 500
+        
+
+        # Construct path to result PDFs
+        output_dir = os.path.join("results", userId, task_id)
+        pdf_labels = ["top25", "top50", "top100", "top250"]
+        pdfs = []
+
+        for label in pdf_labels:
+            filename = f"circlize_{label}.pdf"
+            filepath = os.path.join(output_dir, filename)
+            if os.path.isfile(filepath):
+                pdfs.append({
+                    "label": label,
+                    "url": f"/results/{userId}/{task_id}/{filename}"
+                })
+
+        return jsonify({"pdfs": pdfs})
+    except Exception as e:
+        return jsonify({"error": "Server error", "message": str(e)}), 500
+
+from flask import request, jsonify
+
+@app.route('/app/compare', methods=['POST'])
+def compare_results():
+    try:
+        # Parse the JSON data
+        data = request.get_json()
+        tasks = data.get('data', [])
+        paths=[]
+        if not tasks:
+            return jsonify({"error": "No task data provided"}), 400
+
+        conn = mysql.connect()
+        cursor = conn.cursor()
+    
+        # Example: Loop through task list and log them
+        for task in tasks:
+            task_id = task.get('taskid')
+            user_id = task.get('user_id')
+            tp = task.get('time_point')
+            result_path = f"/app/results/{user_id}/{task_id}"
+            cursor.execute("SELECT GOI_path FROM mixomics_tasks WHERE id = %s", (task_id,))
+            GOI_path = cursor.fetchone()[0]
+            
+            paths.append([result_path,GOI_path,tp])
+            
+        cursor.close()
+        conn.close()
+        print(f"Comparing Tasks path: {paths}")
+        
+        result = compare_mixomics(paths)
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
         
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 3300)))

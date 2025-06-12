@@ -1,0 +1,110 @@
+version: "3.8"
+
+services:
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: omics_portal_backend
+    container_name: "omics_portal_backend"
+    tty: true
+    # ports:
+    #   - "3300:3300"
+    ports:
+      - "127.0.0.1:3300:3300"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_APP=app
+    volumes:
+      - ./app:/app
+    depends_on:
+      - redis
+    networks:
+      - default
+      - kbc-net
+    restart: unless-stopped
+    command: python /app/app.py
+
+  redis:
+    image: "redis:alpine"
+    container_name: "omics_redis"
+    ports:
+      #- "6379:6379"
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - default
+      - kbc-net
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: omics_celery_worker
+    container_name: "omics_celery_worker"
+    volumes:
+      - ./app:/app
+    depends_on:
+      - redis
+      - backend
+    environment:
+      - FLASK_ENV=development
+      - C_FORCE_ROOT=true
+    #command: celery -A app.celery worker --loglevel=info
+    command: python /app/run_celery.py
+    restart: unless-stopped
+    networks:
+      - default
+      - kbc-net
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: omics_celery_beat
+    container_name: "omics_celery_beat"
+    volumes:
+      - ./app:/app
+    depends_on:
+      - redis
+      - backend
+    environment:
+      - FLASK_ENV=development
+    command: celery -A app.celery beat --loglevel=info
+    restart: unless-stopped
+    networks:
+      - default
+      - kbc-net
+      
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: omics_flower
+    container_name: "omics_flower"
+    ports:
+      #- "5555:5555"
+      - "127.0.0.1:5555:5555"
+    volumes:
+      - ./app:/app
+    depends_on:
+      - redis
+      - celery_worker
+    environment:
+      - FLASK_ENV=development
+    command: celery -A app.celery flower --port=5555
+    restart: unless-stopped
+    networks:
+      - default
+      - kbc-net
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  default:
+  kbc-net:
+    external: true

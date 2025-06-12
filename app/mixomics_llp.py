@@ -14,102 +14,107 @@ import os
 import datetime
 
 def goi_upload(mysql):
-    if "file" not in request.files or "user_id" not in request.form:
-        return jsonify({"error": "Missing file or user_id"}), 400
+    # if "file" not in request.files or "user_id" not in request.form:
+    #     return jsonify({"error": "Missing file or user_id"}), 400
+    if "user_id" not in request.form:
+        return jsonify({"error": "Missing user_id"}), 400
 
-    file = request.files["file"]
+    default_goi_path = "Genes_of_interest.csv"
+    GOI_path = default_goi_path 
+    
+    #file = request.files["file"]
     user_id = request.form["user_id"]
     timepoints = request.form["timepoints"]
     Organism = request.form["Organism"]
     OmicsType = request.form["OmicsType"]
     DevelopmentalStage = request.form["DevelopmentalStage"]
-
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
-
-    if file and file.filename.endswith(".csv"):
-        # Create timestamped folder for each upload
-        timestamp = datetime.datetime.now()
-        timestamp_str = timestamp.strftime("%Y%m%d%H%M%S")
-       
-        folder_path = f"uploads/GOI_files/{user_id}/{timestamp_str}/"
-        os.makedirs(folder_path, exist_ok=True)
-
-        # Save file as goi.csv in the user-specific timestamped folder
-        file_path = os.path.join(folder_path, "Genes_of_interest.csv")
-        file.save(file_path)
-
-        GOI_path = file_path
-        
-         # Define paths for each omics type
-        cutoff_paths = {
-            "Transcriptomics": f"organisms_cutoff/{Organism}/Transcriptomics/{DevelopmentalStage}/",
-            "Proteomics": f"organisms_cutoff/{Organism}/Proteomics/{DevelopmentalStage}/",
-            "Metabolomics": f"organisms_cutoff/{Organism}/Metabolomics/{DevelopmentalStage}/",
-        }
-
-        output_paths = {
-            "Transcriptomics": f"uploads/cutoff/{user_id}/Transcriptomics/{timestamp_str}/",
-            "Proteomics": f"uploads/cutoff/{user_id}/Proteomics/{timestamp_str}/",
-            "Metabolomics": f"uploads/cutoff/{user_id}/Metabolomics/{timestamp_str}/",
-        }
-
-        # Insert file path into database
-        try:
-            conn = mysql.connect()
-            cursor = conn.cursor()
-
-            insert_query = """
-                INSERT INTO genes_of_interest (file_path, uploaded_at, user_id, timepoints)
-                VALUES (%s, %s, %s, %s)
-            """
-            cursor.execute(insert_query, (file_path, timestamp, user_id, timepoints))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            
-            results_by_type = {}  # Store results separately by type
-
-            for omics_type in ["Transcriptomics", "Proteomics", "Metabolomics"]:
-                cutoff_path = cutoff_paths[omics_type]
-                output_path = output_paths[omics_type]
-
-                # Create output directory if it doesn't exist
-                os.makedirs(output_path, exist_ok=True)
-
-                # Run script for each omics type
-                command = [
-                    "python",
-                    "New_count.py",
-                    "--input_directory", cutoff_path,
-                    "--output_directory", output_path,
-                    "--GOI_path", GOI_path,
-                    "--timepoints", timepoints,
-                ]
-
-                result = subprocess.run(command, capture_output=True, text=True)
-                if result.returncode == 0:
-                    # Path to the combined results file
-                    combined_results_path = os.path.join(output_path, "final_combined_results.csv")
-                    if os.path.exists(combined_results_path):
-                        # Read and store the results separately
-                        results_df = pd.read_csv(combined_results_path)
-                        results_json = results_df.to_dict(orient="records")
-                        results_by_type[omics_type] = results_json
-                    else:
-                        results_by_type[omics_type] = {"error": f"Results file not found for {omics_type}!"}
-                else:
-                    results_by_type[omics_type] = {"error": f"Error processing file for {omics_type}", "details": result.stderr}
-
-            # Return results separately for each omics type
-            return jsonify({"message": "File uploaded and processed successfully!", "cutoffs": results_by_type, "timestamp": timestamp_str}), 200
-
-        except Exception as e:
-            return jsonify({"error": f"Database or script error: {str(e)}"}), 500
-
-    else:
-        return jsonify({"error": "Invalid file type. Please upload a .csv file"}), 400
     
+    timestamp = datetime.datetime.now()
+    timestamp_str = timestamp.strftime("%Y%m%d%H%M%S")
+
+    if "file" in request.files:
+        file = request.files["file"]
+
+        if file and file.filename.endswith(".csv") and file.filename != "":
+            # Create timestamped folder for each upload
+        
+            folder_path = f"uploads/GOI_files/{user_id}/{timestamp_str}/"
+            os.makedirs(folder_path, exist_ok=True)
+
+            # Save file as goi.csv in the user-specific timestamped folder
+            file_path = os.path.join(folder_path, "Genes_of_interest.csv")
+            file.save(file_path)
+
+            GOI_path = file_path
+        else:
+            return jsonify({"error": "Invalid file type. Please upload a .csv file"}), 400
+        
+    # Define paths for each omics type
+    cutoff_paths = {
+        "Transcriptomics": f"organisms_cutoff/{Organism}/Transcriptomics/{DevelopmentalStage}/",
+        "Proteomics": f"organisms_cutoff/{Organism}/Proteomics/{DevelopmentalStage}/",
+        "Metabolomics": f"organisms_cutoff/{Organism}/Metabolomics/{DevelopmentalStage}/",
+    }
+
+    output_paths = {
+        "Transcriptomics": f"uploads/cutoff/{user_id}/Transcriptomics/{timestamp_str}/",
+        "Proteomics": f"uploads/cutoff/{user_id}/Proteomics/{timestamp_str}/",
+        "Metabolomics": f"uploads/cutoff/{user_id}/Metabolomics/{timestamp_str}/",
+    }
+
+    # Insert file path into database
+    try:
+        conn = mysql.connect()
+        cursor = conn.cursor()
+
+        insert_query = """
+            INSERT INTO genes_of_interest (file_path, uploaded_at, user_id, timepoints)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(insert_query, (GOI_path, timestamp, user_id, timepoints))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        results_by_type = {}  # Store results separately by type
+
+        for omics_type in ["Transcriptomics", "Proteomics", "Metabolomics"]:
+            cutoff_path = cutoff_paths[omics_type]
+            output_path = output_paths[omics_type]
+
+            # Create output directory if it doesn't exist
+            os.makedirs(output_path, exist_ok=True)
+
+            # Run script for each omics type
+            command = [
+                "python",
+                "New_count.py",
+                "--input_directory", cutoff_path,
+                "--output_directory", output_path,
+                "--GOI_path", GOI_path,
+                "--timepoints", timepoints,
+            ]
+
+            result = subprocess.run(command, capture_output=True, text=True)
+            if result.returncode == 0:
+                # Path to the combined results file
+                combined_results_path = os.path.join(output_path, "final_combined_results.csv")
+                if os.path.exists(combined_results_path):
+                    # Read and store the results separately
+                    results_df = pd.read_csv(combined_results_path)
+                    results_json = results_df.to_dict(orient="records")
+                    results_by_type[omics_type] = results_json
+                else:
+                    results_by_type[omics_type] = {"error": f"Results file not found for {omics_type}!"}
+            else:
+                results_by_type[omics_type] = {"error": f"Error processing file for {omics_type}", "details": result.stderr}
+
+        # Return results separately for each omics type
+        return jsonify({"message": "File uploaded and processed successfully!", "cutoffs": results_by_type, "timestamp": timestamp_str, "GOI_path": GOI_path}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Database or script error: {str(e)}"}), 500
+
 def mixomics_metadata(mysql):
     data = request.json
     
@@ -199,10 +204,12 @@ def mixomics_metadata(mysql):
        # trans_length,pro_length,meta_length, mixomics_folder_path, r_value_columns = filter_data(mysql, organism)  
         
         if omics_type == 'Transcriptomics':
-            trans_length, mixomics_folder_path, r_value_columns = filter_transcriptomics_data(mysql, organism)  
+            trans_length, mixomics_folder_path, r_value_columns, log2fc_value_array, q_value_array = filter_transcriptomics_data(mysql, organism, log2fc_value, q_value)  
             filtered_data = {
                 "trans_length": trans_length,
                 "mixomics_folder_path": mixomics_folder_path, 
+                "log2fc": log2fc_value_array,
+                "q_value": q_value_array,
                 "timepoints": r_value_columns
             }
         elif omics_type == 'Proteomics':
@@ -223,7 +230,7 @@ def mixomics_metadata(mysql):
 
     return jsonify(response)
 
-def filter_transcriptomics_data(mysql, organism):
+def filter_transcriptomics_data(mysql, organism, log2fc_value, q_value):
     try:
         connection = mysql.connect()
         with connection.cursor() as cursor:
@@ -246,6 +253,8 @@ def filter_transcriptomics_data(mysql, organism):
             trans_lengths = []  # To store results for all timepoints
             all_folder_paths = []  # To store paths for all timepoints
             all_r_value_columns = []  # To store columns for each timepoint
+            log2fc_value_array = []
+            q_value_array = []
 
             # Loop through all the metadata rows (timepoints)
             for metadata in metadata_rows:
@@ -336,10 +345,12 @@ def filter_transcriptomics_data(mysql, organism):
                 trans_lengths.append(trans_length)
                 all_folder_paths.append(folder_path)
                 all_r_value_columns.append(r_value_columns)
+                log2fc_value_array.append(log2fc_value)
+                q_value_array.append(q_value)
 
             connection.close()
 
-            return trans_lengths, all_folder_paths, all_r_value_columns
+            return trans_lengths, all_folder_paths, all_r_value_columns, log2fc_value_array, q_value_array
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500

@@ -3,4 +3,7 @@ if (!require("BiocManager", quietly = TRUE))
 BiocManager::install("mixOmics")
 install.packages("caret")
 install.packages("optparse")
+install.packages("jsonlite")
+install.packages("stringr")
+install.packages("dplyr")
 
