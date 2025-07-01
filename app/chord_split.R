@@ -1,5 +1,6 @@
 library(circlize)
 library(colorRamp2)
+library(ComplexHeatmap)
 
 args <- commandArgs(trailingOnly = TRUE)
 task_id <- args[1]
@@ -79,7 +80,7 @@ grid.col <- structure(
 )
 
 
-  output_file <- file.path("results", user_id, task_id, paste0("circlize_top", top_n, ".pdf"))
+  output_file <- file.path("results", user_id, task_id, paste0("circlize_Top ", top_n, ".pdf"))
   cat("Writing to", output_file, "\n")
 
   # Try block to ensure dev.off() always runs
@@ -102,17 +103,18 @@ grid.col <- structure(
       )
     )
 
-    circos.track(
-      track.index = 2,
-      track.margin = c(0, mm_h(8)),
-      panel.fun = function(x, y) {
-        sector.index = get.cell.meta.data("sector.index")
-        xlim = get.cell.meta.data("xlim")
-        ylim = get.cell.meta.data("ylim")
-        circos.text(mean(xlim), ylim[1] + 3, clean_labels[sector.index], cex = 0.5, facing = "clockwise", niceFacing = TRUE)
-      },
-      bg.border = NA
-    )
+    # circos.track(
+    #   track.index = 2,
+    #   track.margin = c(0, mm_h(8)),
+    #   panel.fun = function(x, y) {
+    #     sector.index = get.cell.meta.data("sector.index")
+    #     xlim = get.cell.meta.data("xlim")
+    #     ylim = get.cell.meta.data("ylim")
+    #    circos.text(mean(xlim), ylim[2] + 2, clean_labels[sector.index], 
+    #             facing = "outside", adj = c(0.5, 0), cex = 0.5, niceFacing = TRUE)
+    #   },
+    #   bg.border = NA
+    # )
     
 # Get present sectors
 sectors_present <- get.all.sector.index()
@@ -122,20 +124,56 @@ gene_names <- gene_names[gene_names %in% sectors_present]
 protein_names <- protein_names[protein_names %in% sectors_present]
 lipid_names <- lipid_names[lipid_names %in% sectors_present]
 
-# Highlight sectors safely
-if (length(gene_names) > 0) {
-  highlight.sector(gene_names, track.index = 1, col = "darkolivegreen2", text = "Genes", cex = 0.8, text.col = "white", niceFacing = TRUE)
-}
-if (length(protein_names) > 0) {
-  highlight.sector(protein_names, track.index = 1, col = "gold1", text = "Proteins", cex = 0.8, text.col = "white", niceFacing = TRUE)
-}
-if (length(lipid_names) > 0) {
-  highlight.sector(lipid_names, track.index = 1, col = "deepskyblue1", text = "Lipids", cex = 0.8, text.col = "white", niceFacing = TRUE)
-}
+# Highlight groups (inner track, with group labels like Genes/Proteins/Lipids)
+# if (length(gene_names) > 0) {
+#   highlight.sector(gene_names, track.index = 1, col = "darkolivegreen2", 
+#                    text = "Genes", cex = 0.8, text.col = "black", niceFacing = TRUE)
+# }
+# if (length(protein_names) > 0) {
+#   highlight.sector(protein_names, track.index = 1, col = "gold1", 
+#                    text = "Proteins", cex = 0.8, text.col = "black", niceFacing = TRUE)
+# }
+# if (length(lipid_names) > 0) {
+#   highlight.sector(lipid_names, track.index = 1, col = "deepskyblue1", 
+#                    text = "Lipids", cex = 0.8, text.col = "black", niceFacing = TRUE)
+# }
 
-    lgd_links = Legend(at = c(-1, 0, 1), col_fun = col_fun, title_position = "topleft", title = "Correlation")
-    draw(lgd_links, x = unit(1, "npc") - unit(2, "mm"), y = unit(4, "mm"), just = c("right", "bottom"))
+# New outer track for sector (node) labels
+circos.track(
+  track.index = 2,
+  panel.fun = function(x, y) {
+    sector.index = get.cell.meta.data("sector.index")
+    xlim = get.cell.meta.data("xlim")
+    ylim = get.cell.meta.data("ylim")
+    circos.text(mean(xlim), ylim[2] + 1.5, clean_labels[sector.index], 
+                cex = 0.5, facing = "clockwise", niceFacing = TRUE, adj = c(0.5, 0))
+  },
+  bg.border = NA, track.height = mm_h(3)
+)
 
+# --- Legend for omics types ---
+lgd_omics <- Legend(
+  labels = c("Genes", "Proteins", "Lipids"),
+  legend_gp = gpar(fill = c("darkolivegreen2", "gold1", "deepskyblue1")),
+  title = "Omics Type"
+)
+
+# --- Legend for correlation values ---
+lgd_links <- Legend(
+  at = c(-1, 0, 1),
+  col_fun = col_fun,
+  title_position = "topleft",
+  direction = "horizontal",
+  title = "Correlation"
+)
+
+# --- Draw legends side by side ---
+draw(
+  packLegend(lgd_omics, lgd_links),
+  x = unit(1, "npc") - unit(2, "mm"),
+  y = unit(4, "mm"),
+  just = c("right", "bottom")
+)
     dev.off()
   }, silent = FALSE)
 

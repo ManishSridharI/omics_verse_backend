@@ -427,6 +427,13 @@ def serve_file(user_id, task_id, filename):
         return send_from_directory(os.path.dirname(file_path), filename)
     else:
         return "File not found", 404
+
+@app.route('/app/venn_results/<user_id>/<filename>')
+def download_venn(user_id, filename):
+    directory = os.path.join("venn_results", user_id)
+    if not os.path.exists(os.path.join(directory, filename)):
+        return abort(404)
+    return send_from_directory(directory, filename, as_attachment=True)
     
 @app.route('/app/results/plots/<user_id>/<task_id>')
 def view_plots(user_id, task_id):
@@ -483,7 +490,7 @@ def view_chord():
 
         # Construct path to result PDFs
         output_dir = os.path.join("results", userId, task_id)
-        pdf_labels = ["top25", "top50", "top100", "top250"]
+        pdf_labels = ["Top 25", "Top 50", "Top 100", "Top 250"]
         pdfs = []
 
         for label in pdf_labels:
@@ -507,6 +514,7 @@ def compare_results():
         # Parse the JSON data
         data = request.get_json()
         tasks = data.get('data', [])
+        user_id = data.get('user_id', [])
         paths=[]
         if not tasks:
             return jsonify({"error": "No task data provided"}), 400
@@ -529,7 +537,7 @@ def compare_results():
         conn.close()
         print(f"Comparing Tasks path: {paths}")
         
-        result = compare_mixomics(paths)
+        result = compare_mixomics(paths, user_id)
 
         return jsonify(result), 200
 

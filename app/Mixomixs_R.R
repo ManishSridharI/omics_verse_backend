@@ -197,32 +197,78 @@ get_prefix <- function(name) {
   ifelse(is.na(prefix), "Unknown", prefix)
 }
 
-for (cutoff in cutoffs) {
-  type_to_ids <- list()
+# for (cutoff in cutoffs) {
+#   type_to_ids <- list()
 
-  for (i in 1:(nrow(correlation_matrix)-1)) {
-    for (j in (i+1):ncol(correlation_matrix)) {
+#   for (i in 1:(nrow(correlation_matrix)-1)) {
+#     for (j in (i+1):ncol(correlation_matrix)) {
+#       val <- correlation_matrix[i, j]
+#       if (!is.na(val) && val >= cutoff) {
+#         name1 <- rownames(correlation_matrix)[i]
+#         name2 <- colnames(correlation_matrix)[j]
+#         p1 <- get_prefix(name1)
+#         p2 <- get_prefix(name2)
+#         type <- paste(sort(c(p1, p2)), collapse = "_")
+
+#         if (!type %in% names(type_to_ids)) {
+#           type_to_ids[[type]] <- character()
+#         }
+
+#         # Add both elements to the type group
+#         type_to_ids[[type]] <- unique(c(type_to_ids[[type]], name1, name2))
+#       }
+#     }
+#   }
+
+#   # Count unique items per type
+#   type_to_counts <- lapply(type_to_ids, length)
+#   results[[as.character(cutoff)]] <- type_to_counts
+# }
+
+# # Save to JSON
+# json_output_path <- file.path(output_dir, "correlation_type_counts.json")
+# write_json(results, json_output_path, pretty = TRUE)
+
+results <- list()
+
+for (cutoff in cutoffs) {
+  upregulated_type_to_ids <- list()
+  downregulated_type_to_ids <- list()
+
+  for (i in 1:(nrow(correlation_matrix) - 1)) {
+    for (j in (i + 1):ncol(correlation_matrix)) {
       val <- correlation_matrix[i, j]
-      if (!is.na(val) && val >= cutoff) {
+      if (!is.na(val)) {
         name1 <- rownames(correlation_matrix)[i]
         name2 <- colnames(correlation_matrix)[j]
         p1 <- get_prefix(name1)
         p2 <- get_prefix(name2)
         type <- paste(sort(c(p1, p2)), collapse = "_")
 
-        if (!type %in% names(type_to_ids)) {
-          type_to_ids[[type]] <- character()
+        if (val >= cutoff) {
+          if (!type %in% names(upregulated_type_to_ids)) {
+            upregulated_type_to_ids[[type]] <- character()
+          }
+          upregulated_type_to_ids[[type]] <- unique(c(upregulated_type_to_ids[[type]], name1, name2))
+        } else if (val <= -cutoff) {
+          if (!type %in% names(downregulated_type_to_ids)) {
+            downregulated_type_to_ids[[type]] <- character()
+          }
+          downregulated_type_to_ids[[type]] <- unique(c(downregulated_type_to_ids[[type]], name1, name2))
         }
-
-        # Add both elements to the type group
-        type_to_ids[[type]] <- unique(c(type_to_ids[[type]], name1, name2))
       }
     }
   }
 
   # Count unique items per type
-  type_to_counts <- lapply(type_to_ids, length)
-  results[[as.character(cutoff)]] <- type_to_counts
+  up_counts <- lapply(upregulated_type_to_ids, length)
+  down_counts <- lapply(downregulated_type_to_ids, length)
+
+  # Store both counts in the result
+  results[[as.character(cutoff)]] <- list(
+    upregulated = up_counts,
+    downregulated = down_counts
+  )
 }
 
 # Save to JSON

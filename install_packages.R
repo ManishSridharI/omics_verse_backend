@@ -1,9 +1,12 @@
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 BiocManager::install("mixOmics")
+BiocManager::install("ComplexHeatmap")
 install.packages("caret")
 install.packages("optparse")
 install.packages("jsonlite")
 install.packages("stringr")
 install.packages("dplyr")
+install.packages('circlize')
+install.packages('colorRamp2')
 

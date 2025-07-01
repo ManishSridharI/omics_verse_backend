@@ -1,0 +1,114 @@
+{
+  "results": [
+    {
+      "tp": "C10_20_vs_WT20",
+      "cutoff": 0.6,
+      "matching_genes": [
+        "Csa00382s240.1",
+        "Csa00441s260",
+        "Csa05g013720",
+        "Csa05g022760.1",
+        "Csa06g048050",
+        "Csa07g053030.1",
+        "Csa10g006270"
+      ],
+      "count": 7
+    },
+    {
+      "tp": "C10_20_vs_WT20",
+      "cutoff": 0.7,
+      "matching_genes": [
+        "Csa00382s240.1",
+        "Csa00441s260",
+        "Csa05g013720",
+        "Csa05g022760.1",
+        "Csa06g048050",
+        "Csa07g053030.1",
+        "Csa10g006270"
+      ],
+      "count": 7
+    },
+    {
+      "tp": "C10_20_vs_WT20",
+      "cutoff": 0.8,
+      "matching_genes": [
+        "Csa00382s240.1",
+        "Csa00441s260",
+        "Csa05g013720",
+        "Csa05g022760.1",
+        "Csa06g048050",
+        "Csa07g053030.1",
+        "Csa10g006270"
+      ],
+      "count": 7
+    },
+    {
+      "tp": "C10_20_vs_WT20",
+      "cutoff": 0.9,
+      "matching_genes": [
+        "Csa00382s240.1",
+        "Csa05g013720",
+        "Csa05g022760.1",
+        "Csa06g048050",
+        "Csa07g053030.1",
+        "Csa10g006270"
+      ],
+      "count": 6
+    },
+    {
+      "tp": "C10_30_vs_WT30",
+      "cutoff": 0.6,
+      "matching_genes": [
+        "Csa01g040150",
+        "Csa06g048050",
+        "Csa07g060440",
+        "Csa08g006190",
+        "Csa11g104540",
+        "Csa12g030160",
+        "Csa13g016990"
+      ],
+      "count": 7
+    },
+    {
+      "tp": "C10_30_vs_WT30",
+      "cutoff": 0.7,
+      "matching_genes": [
+        "Csa01g040150",
+        "Csa06g048050",
+        "Csa07g060440",
+        "Csa08g006190",
+        "Csa11g104540",
+        "Csa12g030160",
+        "Csa13g016990"
+      ],
+      "count": 7
+    },
+    {
+      "tp": "C10_30_vs_WT30",
+      "cutoff": 0.8,
+      "matching_genes": [
+        "Csa01g040150",
+        "Csa06g048050",
+        "Csa07g060440",
+        "Csa08g006190",
+        "Csa11g104540",
+        "Csa12g030160",
+        "Csa13g016990"
+      ],
+      "count": 7
+    },
+    {
+      "tp": "C10_30_vs_WT30",
+      "cutoff": 0.9,
+      "matching_genes": [
+        "Csa01g040150",
+        "Csa06g048050",
+        "Csa07g060440",
+        "Csa08g006190",
+        "Csa12g030160",
+        "Csa13g016990"
+      ],
+      "count": 6
+    }
+  ]
+}

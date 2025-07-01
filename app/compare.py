@@ -1,8 +1,19 @@
 import pandas as pd
+from datetime import datetime
+import os
+import json
+import subprocess
 
-def compare_mixomics(paths):
+def compare_mixomics(paths, user_id):
     cutoffs = [0.6, 0.7, 0.8, 0.9]
     results = []
+    user_id = user_id
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.makedirs(f"compare_inputs/{user_id}", exist_ok=True)
+    output_json_path = f"compare_inputs/{user_id}/{timestamp}.json"
+    os.makedirs(f"venn_results/{user_id}", exist_ok=True)
+    venn_output_path = f"venn_results/{user_id}/{timestamp}.pdf"
 
     for path_pair in paths:
         matrix_path = f"{path_pair[0]}/chord_Correlation_matrix.csv"
@@ -44,16 +55,32 @@ def compare_mixomics(paths):
                                 selected_genes.add(col_gene)
 
             results.append({
-                "matrix_path": matrix_path,
-                "goi_path": goi_path,
+                # "matrix_path": matrix_path,
+                # "goi_path": goi_path,
                 "tp": tp,
                 "cutoff": cutoff,
                 "matching_genes": sorted(selected_genes),
                 "count": len(selected_genes)
             })
 
+    with open(output_json_path, "w") as f:
+        json.dump({"results": results}, f, indent=2)
+
+    # Run R script with JSON input and PDF output paths
+    command = ["Rscript", "venn.R", output_json_path, venn_output_path]
+    r_process = subprocess.run(command, capture_output=True, text=True)
+
+    if r_process.returncode != 0:
+        return {
+            "status": "error",
+            "message": "Venn R script failed.",
+            "stderr": r_process.stderr
+        }
+
     return {
         "status": "success",
         "message": f"Processed {len(paths)} path pairs.",
-        "results": results
+        # "results": results,
+        # "user_id": user_id,
+        "venn_plot_path": venn_output_path,
     }
