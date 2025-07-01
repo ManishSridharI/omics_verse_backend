@@ -12,7 +12,7 @@ from flask_bcrypt import Bcrypt
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from mixomics_llp import mixomics_metadata, goi_upload
 from celery_config import make_celery
-from compare import compare_mixomics
+from compare import compare_mixomics, compare_mixomics_cutoff
 import subprocess
 import numpy as np
 import pandas as pd
@@ -434,6 +434,13 @@ def download_venn(user_id, filename):
     if not os.path.exists(os.path.join(directory, filename)):
         return abort(404)
     return send_from_directory(directory, filename, as_attachment=True)
+
+@app.route('/app/venn_results_cutoff/<user_id>/<filename>')
+def download_venn_cutoff(user_id, filename):
+    directory = os.path.join("venn_results_cutoff", user_id)
+    if not os.path.exists(os.path.join(directory, filename)):
+        return abort(404)
+    return send_from_directory(directory, filename, as_attachment=True)
     
 @app.route('/app/results/plots/<user_id>/<task_id>')
 def view_plots(user_id, task_id):
@@ -544,6 +551,32 @@ def compare_results():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/app/compare_cutoff', methods=['POST'])
+def compare_results_cutoff():
+    try:
+        # Parse the JSON data
+        req_data = request.get_json()
+        data = req_data.get('data', {})
+        cutoffs = data.get('cutoffs', [])
+        task_id = data.get('taskid', "")
+        user_id = data.get('user_id',"")
+
+        conn = mysql.connect()
+        cursor = conn.cursor()
+    
+        result_path = f"/app/results/{user_id}/{task_id}"
+        cursor.execute("SELECT GOI_path FROM mixomics_tasks WHERE id = %s", (task_id,))
+        GOI_path = cursor.fetchone()[0]
+            
+        cursor.close()
+        conn.close()
+        
+        result = compare_mixomics_cutoff(result_path, GOI_path, cutoffs, user_id)
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
         
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 3300)))

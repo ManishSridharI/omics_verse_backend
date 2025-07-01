@@ -65,5 +65,12 @@ p <- ggvenn(
 
 # Output to single PDF
 pdf(output_pdf, width = 12, height = 10)
-do.call("grid.arrange", c(plot_list, ncol = 2))
+plot_names <- names(plot_list)
+num_plots <- length(plot_names)
+
+for (i in seq(1, num_plots, by = 2)) {
+  plots_to_draw <- plot_list[plot_names[i:min(i+1, num_plots)]]
+  do.call("grid.arrange", c(plots_to_draw, ncol = 1))
+}
+
 dev.off()
